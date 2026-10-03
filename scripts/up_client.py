@@ -82,18 +82,24 @@ def cmd_ping():
     print(f"pong — {mid}")
 
 
-def cmd_accounts():
+def cmd_accounts(json_output=False):
     data = _req("/accounts")
+    if json_output:
+        print(json.dumps(data.get("data", []), indent=2))
+        return
     for acct in data.get("data", []):
         a = acct["attributes"]
         bal = a["balance"]["value"]
         print(f"{acct['id']:36s}  {a['displayName']:20s}  ${bal:>8}  {a['accountType']}")
 
 
-def cmd_transactions(account_id=None, page_size=20):
+def cmd_transactions(account_id=None, page_size=20, json_output=False):
     path = f"/accounts/{account_id}/transactions" if account_id else "/transactions"
     path += f"?page%5Bsize%5D={page_size}"
     data = _req(path)
+    if json_output:
+        print(json.dumps(data.get("data", []), indent=2))
+        return
     for t in data.get("data", []):
         a = t["attributes"]
         amt = a["amount"]["value"]
@@ -106,7 +112,7 @@ def cmd_transactions(account_id=None, page_size=20):
         print(f"\n(more available — follow: {links['next']})", file=sys.stderr)
 
 
-def cmd_account(account_id):
+def cmd_account(account_id, json_output=False):
     """Get a single account by ID."""
     if not account_id:
         print("error: --account-id is required for the account command", file=sys.stderr)
@@ -116,6 +122,9 @@ def cmd_account(account_id):
     if not acct:
         print(f"error: account '{account_id}' not found", file=sys.stderr)
         sys.exit(1)
+    if json_output:
+        print(json.dumps(acct, indent=2))
+        return
     a = acct["attributes"]
     bal = a["balance"]["value"]
     print(f"ID:       {acct['id']}")
@@ -125,8 +134,11 @@ def cmd_account(account_id):
     print(f"Created:  {a['createdAt'][:10]}")
 
 
-def cmd_categories():
+def cmd_categories(json_output=False):
     data = _req("/categories")
+    if json_output:
+        print(json.dumps(data.get("data", []), indent=2))
+        return
     for cat in data.get("data", []):
         print(f"{cat['id']:36s}  {cat['attributes'].get('name','')}")
 
@@ -140,12 +152,13 @@ def cmd_webhooks():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: up_client.py <ping|accounts|account|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>]", file=sys.stderr)
+        print("Usage: up_client.py <ping|accounts|account|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>] [--json]", file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
     account_id = None
     page_size = 20
+    json_output = "--json" in sys.argv
     if "--account-id" in sys.argv:
         idx = sys.argv.index("--account-id")
         if idx + 1 < len(sys.argv):
@@ -162,13 +175,13 @@ if __name__ == "__main__":
     if cmd == "ping":
         cmd_ping()
     elif cmd == "accounts":
-        cmd_accounts()
+        cmd_accounts(json_output)
     elif cmd == "account":
-        cmd_account(account_id)
+        cmd_account(account_id, json_output)
     elif cmd == "transactions":
-        cmd_transactions(account_id, page_size)
+        cmd_transactions(account_id, page_size, json_output)
     elif cmd == "categories":
-        cmd_categories()
+        cmd_categories(json_output)
     elif cmd == "webhooks":
         cmd_webhooks()
     else:

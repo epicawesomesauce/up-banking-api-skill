@@ -25,6 +25,7 @@ Requires a Personal Access Token scoped to the user's own account.
 | Support | https://up.com.au/support/ |
 | API documentation | https://developer.up.com.au |
 | OpenAPI spec (GitHub) | https://github.com/up-banking/api |
+| Community projects | https://github.com/up-banking/api/blob/master/community/EXAMPLES.md |
 | API changelog | https://github.com/up-banking/api/issues/31 |
 
 ## When to Use
@@ -83,8 +84,8 @@ List all accounts with ID, display name, balance, and type (TRANSACTIONAL or SAV
 ### `account --account-id <id>`
 Get a single account by its UUID. Shows the same fields as `accounts` but for one account.
 
-### `transactions [--account-id <id>] [--page-size N]`
-Recent transactions, newest first. Default 20. Scope to one account with `--account-id`, adjust count with `--page-size`.
+### `transactions [--account-id <id>] [--page-size N] [--json]`
+Recent transactions, newest first. Default 20. Scope to one account with `--account-id`, adjust count with `--page-size`. Pass `--json` for structured output the agent can pipe through `jq` or Python for spending analysis — see the "For AI Agents" section in the README.
 
 ### `categories`
 List all transaction categories with IDs.

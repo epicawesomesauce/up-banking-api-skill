@@ -90,7 +90,7 @@ All output is plain-text tabular format on stdout. Errors go to stderr and exit 
 | `ping` | — | row: `pong — <uuid>` |
 | `accounts` | — | table: id, name, balance, type |
 | `account` | `--account-id <id>` | labelled fields: ID, Name, Balance, Type, Created |
-| `transactions` | `--account-id <id>`, `--page-size <n>` | table: date, amount, status, description |
+| `transactions` | `--account-id <id>`, `--page-size <n>`, `--json` | table or full JSON with all attributes |
 | `categories` | — | table: id, name |
 | `webhooks` | — | table: id, url, active |
 
@@ -136,6 +136,7 @@ To find a category ID, run `python $SCRIPT categories` and grep the name.
 
 - [Up API Documentation](https://developer.up.com.au)
 - [Up API OpenAPI Spec (GitHub)](https://github.com/up-banking/api)
+- [Community API projects](https://github.com/up-banking/api/blob/master/community/EXAMPLES.md)
 - [Up Website](https://up.com.au)
 - [Up Features & Product Tree](https://up.com.au/tree/)
 
