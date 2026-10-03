@@ -41,15 +41,56 @@ All output is plain-text tabular format on stdout. Errors go to stderr and exit 
 | `categories` | — | table: id, name |
 | `webhooks` | — | table: id, url, active |
 
-Pass `--json` to `accounts`, `account`, `transactions`, or `categories` to get the full JSON:API resource objects instead of formatted tables. Pipe through `jq` or Python for spending analysis:
+Pass `--json` to `accounts`, `account`, `transactions`, or `categories` to get the full JSON:API resource objects instead of formatted tables. Pipe through `jq` or use the analysis script for spending breakdowns:
 
 ```bash
-python $SCRIPT transactions --page-size 50 --json | \
-  jq 'map(select(.attributes.status == "SETTLED"))
-     | group_by(.attributes.description)
-     | map({category: .[0].attributes.description,
-            total: (map(.attributes.amount.value | tonumber) | add)})
-     | sort_by(-.total) | .[:5]'
+# Spending summary by category
+python scripts/analysis.py summary --days 30
+
+# HTML spending widget (generates a ::preview for Hermes desktop)
+python scripts/analysis.py widget --days 14
+```
+
+The widget command outputs a `::preview{file=...}` directive. In the Hermes desktop app this renders as a live styled card inline in the chat. In other environments the file path is printed on stderr.
+
+## Hermes-exclusive features
+
+### Spending widget (::preview)
+Run `python scripts/analysis.py widget --days N` to generate a horizontal bar chart of your top spending categories. The HTML uses the app's theme variables (`--foreground`, `--muted-foreground`, `--border`) so it matches the current skin. Best at 14-30 day range.
+
+### Cron — recurring reports
+Use `cronjob_manage` to schedule daily balance snapshots or weekly spending digests:
+
+```python
+from hermes_tools import cronjob_manage
+
+cronjob_manage(
+    action="create",
+    name="up-daily-balance",
+    schedule="0 9 * * *",       # 9am daily
+    goal="Run python ~/.hermes/skills/finance/up-banking-api/scripts/up_client.py accounts and summarize the balances. Use ::preview to render an HTML table if the desktop app is available.",
+)
+
+cronjob_manage(
+    action="create",
+    name="up-weekly-spending",
+    schedule="0 10 * * 1",      # 10am Monday
+    goal="Run python ~/.hermes/skills/finance/up-banking-api/scripts/analysis.py summary --days 7 and present the weekly spending breakdown.",
+)
+```
+
+The cron goal text tells the agent what to do — it reads the skill, runs the script, and delivers the result to the user's home channel on the configured messaging platform.
+
+### Large transaction alerts
+Use `cronjob_manage` with a higher frequency and a custom curl command:
+
+```python
+cronjob_manage(
+    action="create",
+    name="up-large-tx-check",
+    schedule="*/30 * * * *",    # every 30 min
+    goal="Check the last 5 transactions from the Up Banking API. If any have an absolute amount over $100 and status HELD, alert the user with the transaction details.",
+)
 ```
 
 ## Write operations (curl only)

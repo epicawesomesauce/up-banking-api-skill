@@ -58,6 +58,13 @@ python $SCRIPT transactions --account-id <uuid>
 python $SCRIPT account --account-id <uuid>
 python $SCRIPT categories
 python $SCRIPT webhooks
+
+Spending analysis (requires Hermes for `::preview` widget):
+
+```bash
+ANALYSIS=~/.hermes/skills/finance/up-banking-api/scripts/analysis.py
+python $ANALYSIS summary --days 30
+python scripts/analysis.py widget --days 14    # outputs ::preview directive
 ```
 
 Or directly with curl (the `$UP_BANKING_PAT` env var is available inside Hermes sessions):
@@ -92,6 +99,12 @@ List all transaction categories with IDs.
 
 ### `webhooks`
 List registered webhook endpoints with their active status.
+
+### `analysis summary --days N`
+Spending breakdown by category — total in/out, net, top categories with percentages. Uses `--json` output internally.
+
+### `analysis widget --days N`
+Generates a themed HTML bar chart as a `::preview` widget for the Hermes desktop app. Renders spending by description with proportional bars.
 
 ### Write operations (curl only)
 ```bash
