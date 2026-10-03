@@ -90,9 +90,9 @@ def cmd_accounts():
         print(f"{acct['id']:36s}  {a['displayName']:20s}  ${bal:>8}  {a['accountType']}")
 
 
-def cmd_transactions(account_id=None):
+def cmd_transactions(account_id=None, page_size=20):
     path = f"/accounts/{account_id}/transactions" if account_id else "/transactions"
-    path += "?page%5Bsize%5D=20"
+    path += f"?page%5Bsize%5D={page_size}"
     data = _req(path)
     for t in data.get("data", []):
         a = t["attributes"]
@@ -122,22 +122,31 @@ def cmd_webhooks():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: up_client.py <ping|accounts|transactions|categories|webhooks> [--account-id <id>]", file=sys.stderr)
+        print("Usage: up_client.py <ping|accounts|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>]", file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
     account_id = None
+    page_size = 20
     if "--account-id" in sys.argv:
         idx = sys.argv.index("--account-id")
         if idx + 1 < len(sys.argv):
             account_id = sys.argv[idx + 1]
+    if "--page-size" in sys.argv:
+        idx = sys.argv.index("--page-size")
+        if idx + 1 < len(sys.argv):
+            try:
+                page_size = max(1, int(sys.argv[idx + 1]))
+            except ValueError:
+                print("error: --page-size must be a number", file=sys.stderr)
+                sys.exit(1)
 
     if cmd == "ping":
         cmd_ping()
     elif cmd == "accounts":
         cmd_accounts()
     elif cmd == "transactions":
-        cmd_transactions(account_id)
+        cmd_transactions(account_id, page_size)
     elif cmd == "categories":
         cmd_categories()
     elif cmd == "webhooks":

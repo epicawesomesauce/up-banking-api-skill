@@ -59,6 +59,7 @@ python scripts/up_client.py ping
 python scripts/up_client.py accounts
 python scripts/up_client.py transactions
 python scripts/up_client.py transactions --account-id <id>
+python scripts/up_client.py transactions --page-size 5
 python scripts/up_client.py categories
 ```
 
@@ -86,6 +87,7 @@ curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com
 | Accounts | `python scripts/up_client.py accounts` |
 | Transactions | `python scripts/up_client.py transactions` |
 | Account txs | `python scripts/up_client.py transactions --account-id <id>` |
+| Last N txs | `python scripts/up_client.py transactions --page-size 5` |
 | Categories | `python scripts/up_client.py categories` |
 | Categorise tx | `PATCH /transactions/{id}/relationships/category` |
 | Add tags | `POST /transactions/{id}/relationships/tags` |
@@ -129,7 +131,7 @@ Expected: `{"meta":{"id":"<uuid>","statusEmoji":"⚡️"}}`
 List all accounts with `python scripts/up_client.py accounts` to get account IDs, names, types, and balances.
 
 ### 4. Pull transactions
-Use `python scripts/up_client.py transactions` for the most recent 20 across all accounts, or scope to one account with `--account-id`.
+Use `python scripts/up_client.py transactions` for the most recent 20 across all accounts, or scope to one account with `--account-id`. Adjust the count with `--page-size 5`.
 
 ### 5. Categorise or tag (optional)
 ```bash

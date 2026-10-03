@@ -1,0 +1,7 @@
+# No need to ignore the skill assets — they're the repo content.
+# Only exclude editor/OS cruft.
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
