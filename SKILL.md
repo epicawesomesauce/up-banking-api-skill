@@ -1,8 +1,8 @@
 ---
 name: up-banking-api
 description: "Query Up bank: accounts, transactions, balances, spending."
-version: 1.0.0
-author: up-banking-api-skill contributors (spheraz), Hermes Agent
+version: 1.1.0
+author: "up-banking-api-skill contributors (see CONTRIBUTING.md)"
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
@@ -39,101 +39,60 @@ Requires a Personal Access Token scoped to the user's own account.
 
 1. An Up bank account (get it at https://up.com.au)
 2. A Personal Access Token from the Up app: swipe right → Data sharing → Personal Access Token → Generate a token
-3. Store the token with `hermes config set UP_BANKING_PAT <token>` (saves to `~/.hermes/.env`)
-4. `curl` available in PATH (pre-installed on all platforms)
+3. Store the token with `hermes config set UP_BANKING_PAT <token>` — the full string including the `up:yeah:` prefix
+4. Python 3.8+ and `curl`
 
 ## How to Run
 
-```bash
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/util/ping'
-```
-
-If the ping returns a `meta.id`, the connection works.
-
-## Usage
-
-The helper script at `scripts/up_client.py` wraps the common queries (run from the skill's installed directory or using its full path):
+The helper script wraps the common queries. Set the script path for easy reuse:
 
 ```bash
-python scripts/up_client.py ping
-python scripts/up_client.py accounts
-python scripts/up_client.py transactions
-python scripts/up_client.py transactions --account-id <id>
-python scripts/up_client.py transactions --page-size 5
-python scripts/up_client.py categories
+SCRIPT=~/.hermes/skills/finance/up-banking-api/scripts/up_client.py
+
+python $SCRIPT ping
+python $SCRIPT accounts
+python $SCRIPT transactions
+python $SCRIPT transactions --page-size 5
+python $SCRIPT transactions --account-id <uuid>
+python $SCRIPT account --account-id <uuid>
+python $SCRIPT categories
+python $SCRIPT webhooks
 ```
 
-Or directly with curl:
+Or directly with curl (the `$UP_BANKING_PAT` env var is available inside Hermes sessions):
 
 ```bash
-# Ping
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/util/ping'
+curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" \
+  'https://api.up.com.au/api/v1/util/ping'
 
-# List accounts
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/accounts'
+curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" \
+  'https://api.up.com.au/api/v1/accounts'
 
-# Recent 20 transactions
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/transactions?page%5Bsize%5D=20'
-
-# Account-specific transactions
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/accounts/ACCOUNT_ID/transactions?page%5Bsize%5D=20'
+curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" \
+  'https://api.up.com.au/api/v1/transactions?page%5Bsize%5D=20'
 ```
 
-## Quick Reference
+## Commands
 
-| Action | Command |
-|--------|---------|
-| Ping | `python scripts/up_client.py ping` |
-| Accounts | `python scripts/up_client.py accounts` |
-| Transactions | `python scripts/up_client.py transactions` |
-| Account txs | `python scripts/up_client.py transactions --account-id <id>` |
-| Last N txs | `python scripts/up_client.py transactions --page-size 5` |
-| Categories | `python scripts/up_client.py categories` |
-| Categorise tx | `PATCH /transactions/{id}/relationships/category` |
-| Add tags | `POST /transactions/{id}/relationships/tags` |
-| Remove tags | `DELETE /transactions/{id}/relationships/tags` |
-| Webhooks | `python scripts/up_client.py webhooks` |
+### `ping`
+Connection health check. Returns a UUID and ⚡️ if the token is valid.
 
-## API Endpoints
+### `accounts`
+List all accounts with ID, display name, balance, and type (TRANSACTIONAL or SAVER).
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /util/ping | Health check — returns a UUID |
-| GET | /accounts | List all accounts |
-| GET | /accounts/{id} | Single account with balance |
-| GET | /accounts/{id}/transactions | Account-scoped transactions |
-| GET | /transactions | All transactions (paginated) |
-| GET | /transactions/{id} | Single transaction detail |
-| PATCH | /transactions/{id}/relationships/category | Set category |
-| POST | /transactions/{id}/relationships/tags | Attach tags |
-| DELETE | /transactions/{id}/relationships/tags | Detach tags |
-| GET | /categories | List all categories |
-| GET | /categories/{id} | Single category |
-| GET | /tags | List all tags |
-| POST | /webhooks | Create webhook |
-| GET | /webhooks | List webhooks |
-| DELETE | /webhooks/{id} | Delete webhook |
-| POST | /webhooks/{webhookId}/ping | Test webhook |
-| GET | /webhooks/{webhookId}/logs | Webhook delivery logs |
+### `account --account-id <id>`
+Get a single account by its UUID. Shows the same fields as `accounts` but for one account.
 
-## Procedure
+### `transactions [--account-id <id>] [--page-size N]`
+Recent transactions, newest first. Default 20. Scope to one account with `--account-id`, adjust count with `--page-size`.
 
-### 1. First-time setup
-Generate a PAT in the Up app (swipe right → Data sharing → Personal Access Token). Store it with `hermes config set UP_BANKING_PAT <token>`.
+### `categories`
+List all transaction categories with IDs.
 
-### 2. Verify connectivity
-```bash
-curl -s --globoff -H "Authorization: Bearer $UP_BANKING_PAT" 'https://api.up.com.au/api/v1/util/ping'
-```
-Expected: `{"meta":{"id":"<uuid>","statusEmoji":"⚡️"}}`
+### `webhooks`
+List registered webhook endpoints with their active status.
 
-### 3. Pull account data
-List all accounts with `python scripts/up_client.py accounts` to get account IDs, names, types, and balances.
-
-### 4. Pull transactions
-Use `python scripts/up_client.py transactions` for the most recent 20 across all accounts, or scope to one account with `--account-id`. Adjust the count with `--page-size 5`.
-
-### 5. Categorise or tag (optional)
+### Write operations (curl only)
 ```bash
 # Categorise a transaction
 curl -s --globoff -X PATCH -H "Authorization: Bearer $UP_BANKING_PAT" \
@@ -146,40 +105,63 @@ curl -s --globoff -X POST -H "Authorization: Bearer $UP_BANKING_PAT" \
   -H "Content-Type: application/json" \
   -d '{"data":[{"type":"tags","id":"<tag-name>"}]}' \
   'https://api.up.com.au/api/v1/transactions/<tx-id>/relationships/tags'
+
+# Remove tags
+curl -s --globoff -X DELETE -H "Authorization: Bearer $UP_BANKING_PAT" \
+  'https://api.up.com.au/api/v1/transactions/<tx-id>/relationships/tags'
 ```
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /util/ping | Health check |
+| GET | /accounts | List all accounts |
+| GET | /accounts/{id} | Single account |
+| GET | /accounts/{id}/transactions | Account-scoped transactions |
+| GET | /transactions | All transactions |
+| GET | /transactions/{id} | Single transaction |
+| PATCH | /transactions/{id}/relationships/category | Set category |
+| POST | /transactions/{id}/relationships/tags | Attach tags |
+| DELETE | /transactions/{id}/relationships/tags | Detach tags |
+| GET | /categories | List all categories |
+| GET | /categories/{id} | Single category |
+| GET | /tags | List all tags |
+| POST | /webhooks | Create webhook |
+| GET | /webhooks | List webhooks |
+| DELETE | /webhooks/{id} | Delete webhook |
+| POST | /webhooks/{webhookId}/ping | Test webhook |
+| GET | /webhooks/{webhookId}/logs | Webhook delivery logs |
 
 ## Data Model
 
-Accounts have: `id`, `displayName`, `accountType` (TRANSACTIONAL or SAVER), `ownershipType`, `balance` (currencyCode + value + valueInBaseUnits), `createdAt`.
+Responses follow JSON:API spec (`data` → array of resource objects, `links` for pagination).
 
-Transactions have: `id`, `status` (HELD or SETTLED), `rawText`, `description`, `amount`, `settledAt`, `createdAt`, `category` relationship, `tags` relationship.
+**Account:** `id`, `displayName`, `accountType` (TRANSACTIONAL or SAVER), `ownershipType`, `balance` (currencyCode + value + valueInBaseUnits), `createdAt`.
 
-All responses follow JSON:API spec (`data` → array of resource objects, `links` for pagination).
+**Transaction:** `id`, `status` (HELD or SETTLED), `rawText`, `description`, `amount` (currencyCode + value + valueInBaseUnits), `settledAt`, `createdAt`, category/tags relationships.
 
 ## Pitfalls
 
-- **Square brackets in query params** need `--globoff` flag on curl, or URL-encode as `%5B`/`%5D` — otherwise bash's glob expansion eats them.
-- **Token is read from file every time** — there's no caching; each curl command reads it fresh. Keep the file as a single line with no trailing spaces.
-- **Rate limits** are generous but undocumented. Space requests across the page size (50/page) for bulk history pulls.
-- **The PAT is personal** — it has full read access to the user's accounts. Never log it, echo it, or save it in conversation transcripts. Stored in `.env` via `hermes config set` — auto-redacted from logs by default.
-- **If `.env` isn't loaded** (e.g. running the script outside Hermes), fallback reads `~/.hermes/secrets/up-banking-pat` if it exists.
-- **"up:yeah:" prefix** is part of the visual token format in the UI but the API accepts only the raw hex string — strip any prefix before saving.
-- **Pagination** uses cursor-based `links.next`. Following it requires appending the `next` URL's query string to the base URL. The helper script does this automatically.
-- **MSYS shell note** on Windows: native tools need `C:/...` paths; `/tmp` works for scratch but avoid it for persistent files.
-- **Webhooks** deliver events to a callback URL. The payload format is documented but the skill does not include a webhook receiver — you need a public endpoint to receive them.
+- **Square brackets in query params** need `--globoff` flag on curl, or URL-encode as `%5B`/`%5D` to avoid bash glob expansion.
+- **Token includes the `up:yeah:` prefix** — store the full string as returned by the app. The API requires this prefix; stripping it causes a 401 error.
+- **Rate limits** are undocumented but generous. Default page size is 20; max 50 per page for bulk pulls.
+- **The PAT is personal** — it grants full read access to your accounts. Stored in `.env` via `hermes config set` — auto-redacted from Hermes logs by default.
+- **Pagination** is cursor-based via `links.next`. The helper script shows a stderr message when more pages are available.
+- **Webhooks** require a public callback URL. This skill lists and manages webhooks but does not include a receiver.
+- **MSYS shell** on Windows: use `C:/...` paths for native tools; avoid `/tmp` for persistent files.
 
 ## Verification
 
 ```bash
-python scripts/up_client.py ping  # returns pong with UUID
-python scripts/up_client.py accounts  # at least one account
-python scripts/up_client.py transactions  # non-empty list
+SCRIPT=~/.hermes/skills/finance/up-banking-api/scripts/up_client.py
+python $SCRIPT ping        # → pong — <uuid>
+python $SCRIPT accounts    # → at least one account row
+python $SCRIPT transactions  # → at least one transaction row
 ```
-
-All three pass → the skill is fully operational. The token is valid, endpoints work, and the helper script is wired correctly.
 
 ## Limitations
 
 - **Read-only with exceptions:** categorisation and tagging are write endpoints; everything else is read-only. No funds transfer or payment initiation.
-- **Beta API:** Up's API is still in beta. Endpoints may change, and some features (scheduled payments, statements) are not yet available.
-- **Personal scope only:** the PAT is scoped to the user's own accounts. No organisation/business account access through this token type.
+- **Beta API:** Endpoints may change. Features like scheduled payments and statements are not yet available via the API.
+- **Personal scope only:** the PAT is scoped to the user's own accounts. No organisation/business access through this token type.

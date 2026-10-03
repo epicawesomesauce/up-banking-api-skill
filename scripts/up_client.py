@@ -106,10 +106,28 @@ def cmd_transactions(account_id=None, page_size=20):
         print(f"\n(more available — follow: {links['next']})", file=sys.stderr)
 
 
+def cmd_account(account_id):
+    """Get a single account by ID."""
+    if not account_id:
+        print("error: --account-id is required for the account command", file=sys.stderr)
+        sys.exit(1)
+    data = _req(f"/accounts/{account_id}")
+    acct = data.get("data", {})
+    if not acct:
+        print(f"error: account '{account_id}' not found", file=sys.stderr)
+        sys.exit(1)
+    a = acct["attributes"]
+    bal = a["balance"]["value"]
+    print(f"ID:       {acct['id']}")
+    print(f"Name:     {a['displayName']}")
+    print(f"Balance:  ${bal}")
+    print(f"Type:     {a['accountType']}")
+    print(f"Created:  {a['createdAt'][:10]}")
+
+
 def cmd_categories():
     data = _req("/categories")
     for cat in data.get("data", []):
-        rel = data.get("included", [])
         print(f"{cat['id']:36s}  {cat['attributes'].get('name','')}")
 
 
@@ -122,7 +140,7 @@ def cmd_webhooks():
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: up_client.py <ping|accounts|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>]", file=sys.stderr)
+        print("Usage: up_client.py <ping|accounts|account|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>]", file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -145,6 +163,8 @@ if __name__ == "__main__":
         cmd_ping()
     elif cmd == "accounts":
         cmd_accounts()
+    elif cmd == "account":
+        cmd_account(account_id)
     elif cmd == "transactions":
         cmd_transactions(account_id, page_size)
     elif cmd == "categories":
