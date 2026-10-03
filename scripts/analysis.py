@@ -3,11 +3,24 @@
 
 import json
 import os
+import re
 import sys
 import subprocess
 import tempfile
 from collections import defaultdict
 from datetime import datetime, timedelta
+
+
+INTERNAL_TRANSFER_RE = re.compile(
+    r"^(Transfer (from|to)|Cover (from|to)|Forward (from|to)|"
+    r"Auto Transfer (from|to)|Quick save transfer (from|to)|"
+    r"Round Up|Final interest payment from)",
+    re.IGNORECASE,
+)
+
+
+def _is_internal_transfer(desc):
+    return bool(INTERNAL_TRANSFER_RE.match(desc or ""))
 
 
 def _fetch(endpoint):
@@ -60,6 +73,10 @@ def cmd_summary(days=30):
         cat_rel = tx.get("relationships", {}).get("category", {}).get("data", {})
         cat_id = cat_rel.get("id", "uncategorised") if cat_rel else "uncategorised"
 
+        # Internal transfers (between user's own accounts) don't count as income/spend
+        if _is_internal_transfer(a["description"]):
+            continue
+
         if amt < 0:
             total_out += abs(amt)
             categories[cat_id]["count"] += 1
@@ -103,6 +120,8 @@ def cmd_widget(days=30):
             continue
         amt = _parse_amount(a["amount"]["value"])
         desc = a["description"] or "Unknown"
+        if _is_internal_transfer(desc):
+            continue
         if amt < 0:
             total_out += abs(amt)
             categories[desc] += abs(amt)

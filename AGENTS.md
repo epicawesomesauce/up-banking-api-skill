@@ -44,7 +44,7 @@ All output is plain-text tabular format on stdout. Errors go to stderr and exit 
 Pass `--json` to `accounts`, `account`, `transactions`, or `categories` to get the full JSON:API resource objects instead of formatted tables. Pipe through `jq` or use the analysis script for spending breakdowns:
 
 ```bash
-# Spending summary by category
+# Spending summary by category (excludes internal transfers)
 python scripts/analysis.py summary --days 30
 
 # HTML spending widget (generates a ::preview for Hermes desktop)
@@ -52,6 +52,36 @@ python scripts/analysis.py widget --days 14
 ```
 
 The widget command outputs a `::preview{file=...}` directive. In the Hermes desktop app this renders as a live styled card inline in the chat. In other environments the file path is printed on stderr.
+
+## Data model notes (learned from analysis)
+
+- **Amount sign**: negative = money out (debit), positive = money in (credit).
+- **Internal transfers** between the user's own accounts appear as transactions and **must be excluded** from spending/income/savings math. The analysis script excludes these automatically via a regex matching `Transfer from/to`, `Cover from/to`, `Quick save transfer from/to`, `Round Up`, `Final interest payment from`.
+- **2Up / joint accounts**: global `transactions` (without `--account-id`) includes both individual AND joint (2Up) accounts. When breaking down expenses be aware joint household bills will appear. Use `--account-id <id>` to isolate.
+- **Categories are hierarchical**: parent (e.g. `home`, `good-life`) → children (e.g. `groceries`, `eating-out`). Transactions carry a `category` slug; parent relationship is available in the full JSON.
+
+## Transaction filters (CLI)
+
+```bash
+python scripts/up_client.py transactions --since 2026-09-01 --until 2026-09-30
+python scripts/up_client.py transactions --category groceries
+python scripts/up_client.py transactions --status HELD
+python scripts/up_client.py transactions --account-id <uuid> --since 2026-09-01
+python scripts/up_client.py transactions --limit 500      # follow pagination up to N
+python scripts/up_client.py transactions --no-cache
+```
+
+Responses are cached 15 minutes to avoid rate limits. Pass `--no-cache` to force fresh data.
+
+## Validation framework (MANDATORY for financial analysis)
+
+Every financial analysis MUST present a validation section. Include the checks below that apply:
+
+1. **Show your working** — report the date range, transaction count before and after filtering, and what exclusions were applied. E.g. "Based on 20 transactions from 2026-09-01 to 2026-09-30 (45 raw, 25 excluded: internal transfers)."
+2. **Income = Expenses + Net** — verify the computed `income - expenses = net` balances. A mismatch means a filtering error.
+3. **Category exhaustiveness** — sum the category totals and compare to the overall total. Report if >1% of spending is uncategorised.
+4. **Spot-check samples** — show 2-3 sample transactions from the largest categories so the user can verify correct categorisation.
+5. **2Up awareness** — flag whether joint account spending is included. If the user has a 2Up account and you didn't isolate it, say so.
 
 ## Hermes-exclusive features
 

@@ -2,8 +2,10 @@
 """Up Banking API client — wraps the most common queries."""
 
 import json
+import hashlib
 import os
 import sys
+import tempfile
 import urllib.request
 import urllib.error
 
@@ -76,114 +78,172 @@ def _req(path: str) -> dict:
         sys.exit(1)
 
 
-def cmd_ping():
-    data = _req("/util/ping")
-    mid = data.get("meta", {}).get("id", "?")
-    print(f"pong — {mid}")
+def _req_paginated(path: str, limit: int = 1000, use_cache: bool = True) -> list:
+    """Fetch ALL results following links.next, up to `limit`."""
+    import time
+
+    cache = None
+    if use_cache:
+        cache_dir = os.path.join(tempfile.gettempdir(), "up-api-cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_key = hashlib.sha256((path + f":{limit}").encode()).hexdigest()[:16]
+        cache = os.path.join(cache_dir, cache_key)
+        age = time.time() - os.path.getmtime(cache) if os.path.exists(cache) else None
+        if age is not None and age < 900:  # 15 min TTL
+            with open(cache) as f:
+                return json.load(f)
+
+    tok = _token()
+    all_data = []
+    next_url = BASE + path
+    while next_url and len(all_data) < limit:
+        req = urllib.request.Request(next_url, headers={"Authorization": f"Bearer {tok}"})
+        try:
+            with urllib.request.urlopen(req) as resp:
+                resp_data = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"error: HTTP {e.code} — {body}", file=sys.stderr)
+            sys.exit(1)
+        all_data.extend(resp_data.get("data", []))
+        next_url = resp_data.get("links", {}).get("next") or ""
+
+    all_data = all_data[:limit]
+
+    if use_cache and cache:
+        with open(cache, "w") as f:
+            json.dump(all_data, f)
+    return all_data
 
 
-def cmd_accounts(json_output=False):
-    data = _req("/accounts")
+def _cmd_accounts(json_output=False, use_cache=True):
+    data = _req_paginated("/accounts", limit=100, use_cache=use_cache)
     if json_output:
-        print(json.dumps(data.get("data", []), indent=2))
+        print(json.dumps(data, indent=2))
         return
-    for acct in data.get("data", []):
+    for acct in data:
         a = acct["attributes"]
         bal = a["balance"]["value"]
         print(f"{acct['id']:36s}  {a['displayName']:20s}  ${bal:>8}  {a['accountType']}")
 
 
-def cmd_transactions(account_id=None, page_size=20, json_output=False):
+def _cmd_accounts_json(account_id=None, since=None, until=None, category=None,
+                      status=None, page_size=100, limit=1000, use_cache=True, json_output=False):
+    """Fetch transactions with filters, following pagination."""
     path = f"/accounts/{account_id}/transactions" if account_id else "/transactions"
-    path += f"?page%5Bsize%5D={page_size}"
-    data = _req(path)
+    params = []
+    if since:
+        params.append(f"filter%5Bsince%5D={since}T00:00:00%2B10:00")
+    if until:
+        params.append(f"filter%5Buntil%5D={until}T23:59:59%2B10:00")
+    if category:
+        params.append(f"filter%5Bcategory%5D={category}")
+    if status:
+        params.append(f"filter%5Bstatus%5D={status}")
+    params.append(f"page%5Bsize%5D={page_size}")
+    param_str = "&".join(params)
+    path = path + "?" + param_str
+
+    data = _req_paginated(path, limit=limit, use_cache=use_cache)
     if json_output:
-        print(json.dumps(data.get("data", []), indent=2))
+        print(json.dumps(data, indent=2))
         return
-    for t in data.get("data", []):
+    for t in data:
         a = t["attributes"]
         amt = a["amount"]["value"]
         desc = a["description"]
         st = a["status"]
         dt = a.get("settledAt") or a.get("createdAt", "")
         print(f"{dt[:10] if dt else 'pending':10s}  ${amt:>8}  {st:7s}  {desc}")
-    links = data.get("links", {})
-    if links.get("next"):
-        print(f"\n(more available — follow: {links['next']})", file=sys.stderr)
 
 
-def cmd_account(account_id, json_output=False):
-    """Get a single account by ID."""
-    if not account_id:
-        print("error: --account-id is required for the account command", file=sys.stderr)
-        sys.exit(1)
-    data = _req(f"/accounts/{account_id}")
-    acct = data.get("data", {})
-    if not acct:
-        print(f"error: account '{account_id}' not found", file=sys.stderr)
-        sys.exit(1)
-    if json_output:
-        print(json.dumps(acct, indent=2))
-        return
-    a = acct["attributes"]
-    bal = a["balance"]["value"]
-    print(f"ID:       {acct['id']}")
-    print(f"Name:     {a['displayName']}")
-    print(f"Balance:  ${bal}")
-    print(f"Type:     {a['accountType']}")
-    print(f"Created:  {a['createdAt'][:10]}")
-
-
-def cmd_categories(json_output=False):
-    data = _req("/categories")
-    if json_output:
-        print(json.dumps(data.get("data", []), indent=2))
-        return
-    for cat in data.get("data", []):
-        print(f"{cat['id']:36s}  {cat['attributes'].get('name','')}")
-
-
-def cmd_webhooks():
-    data = _req("/webhooks")
-    for wh in data.get("data", []):
-        a = wh["attributes"]
-        print(f"{wh['id']:36s}  {a.get('url','')}  active={a.get('isActive', False)}")
+def cmd_ping():
+    data = _req("/util/ping")
+    mid = data.get("meta", {}).get("id", "?")
+    print(f"pong — {mid}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: up_client.py <ping|accounts|account|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>] [--json]", file=sys.stderr)
+        print("Usage: up_client.py <ping|accounts|account|transactions|categories|webhooks> [--account-id <id>] [--page-size <n>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--category <slug>] [--status SETTLED|HELD] [--limit N] [--no-cache] [--json]", file=sys.stderr)
         sys.exit(1)
 
     cmd = sys.argv[1]
     account_id = None
-    page_size = 20
+    page_size = 100
+    limit = 1000
+    since = None
+    until = None
+    category = None
+    status = None
+    use_cache = True
     json_output = "--json" in sys.argv
-    if "--account-id" in sys.argv:
-        idx = sys.argv.index("--account-id")
-        if idx + 1 < len(sys.argv):
-            account_id = sys.argv[idx + 1]
-    if "--page-size" in sys.argv:
-        idx = sys.argv.index("--page-size")
-        if idx + 1 < len(sys.argv):
+
+    def _get_arg(flag):
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 < len(sys.argv):
+                return sys.argv[idx + 1]
+        return None
+
+    def _get_int_arg(flag, default):
+        val = _get_arg(flag)
+        if val:
             try:
-                page_size = max(1, int(sys.argv[idx + 1]))
+                return max(1, int(val))
             except ValueError:
-                print("error: --page-size must be a number", file=sys.stderr)
+                print(f"error: {flag} must be a number", file=sys.stderr)
                 sys.exit(1)
+        return default
+
+    account_id = _get_arg("--account-id")
+    since = _get_arg("--since")
+    until = _get_arg("--until")
+    category = _get_arg("--category")
+    status = _get_arg("--status")
+    page_size = _get_int_arg("--page-size", 100)
+    limit = _get_int_arg("--limit", 1000)
+    if "--no-cache" in sys.argv:
+        use_cache = False
 
     if cmd == "ping":
         cmd_ping()
     elif cmd == "accounts":
-        cmd_accounts(json_output)
+        _cmd_accounts(json_output, use_cache)
     elif cmd == "account":
-        cmd_account(account_id, json_output)
+        if not account_id:
+            print("error: --account-id is required for the account command", file=sys.stderr)
+            sys.exit(1)
+        data = _req(f"/accounts/{account_id}")
+        acct = data.get("data", {})
+        if not acct:
+            print(f"error: account '{account_id}' not found", file=sys.stderr)
+            sys.exit(1)
+        if json_output:
+            print(json.dumps(acct, indent=2))
+            sys.exit(0)
+        a = acct["attributes"]
+        bal = a["balance"]["value"]
+        print(f"ID:       {acct['id']}")
+        print(f"Name:     {a['displayName']}")
+        print(f"Balance:  ${bal}")
+        print(f"Type:     {a['accountType']}")
+        print(f"Created:  {a['createdAt'][:10]}")
     elif cmd == "transactions":
-        cmd_transactions(account_id, page_size, json_output)
+        _cmd_accounts_json(account_id, since, until, category, status,
+                         page_size, limit, use_cache, json_output)
     elif cmd == "categories":
-        cmd_categories(json_output)
+        data = _req_paginated("/categories", limit=200, use_cache=use_cache)
+        if json_output:
+            print(json.dumps(data, indent=2))
+        else:
+            for cat in data:
+                print(f"{cat['id']:36s}  {cat['attributes'].get('name','')}")
     elif cmd == "webhooks":
-        cmd_webhooks()
+        data = _req_paginated("/webhooks", limit=100, use_cache=use_cache)
+        for wh in data:
+            a = wh["attributes"]
+            print(f"{wh['id']:36s}  {a.get('url','')}  active={a.get('isActive', False)}")
     else:
         print(f"error: unknown command '{cmd}'", file=sys.stderr)
         sys.exit(1)
