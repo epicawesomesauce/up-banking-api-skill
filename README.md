@@ -142,3 +142,7 @@ To find a category ID, run `python $SCRIPT categories` and grep the name.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
